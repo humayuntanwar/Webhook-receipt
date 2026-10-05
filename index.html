@@ -1,0 +1,696 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Webhook Receipt — paste, parse, replay</title>
+  <meta name="author" content="Humayun Tanwar" />
+  <meta name="description" content="Paste a raw webhook body + headers. See parsed fields, signature checklist, and a copyable curl replay stub. No accounts. Nothing leaves your browser." />
+  <style>
+    :root {
+      --bg: #0b0d10;
+      --panel: #12151a;
+      --border: #242a33;
+      --text: #e8ecf1;
+      --muted: #8b95a5;
+      --accent: #5b9cff;
+      --ok: #3ecf8e;
+      --warn: #f5a524;
+      --bad: #f07178;
+      --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      --sans: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: var(--sans);
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.45;
+      min-height: 100vh;
+    }
+    header {
+      border-bottom: 1px solid var(--border);
+      padding: 1.25rem 1.5rem;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem 1.5rem;
+      align-items: baseline;
+      justify-content: space-between;
+    }
+    header h1 {
+      margin: 0;
+      font-size: 1.1rem;
+      font-weight: 600;
+      letter-spacing: -0.02em;
+    }
+    header p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 0.85rem;
+    }
+    .badge {
+      font-size: 0.7rem;
+      color: var(--ok);
+      border: 1px solid #1e4d38;
+      background: #0f241c;
+      padding: 0.15rem 0.5rem;
+      border-radius: 999px;
+      white-space: nowrap;
+    }
+    main {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 1.25rem 1.5rem 3rem;
+      display: grid;
+      gap: 1rem;
+    }
+    @media (min-width: 900px) {
+      main { grid-template-columns: 1fr 1fr; }
+      .span-2 { grid-column: 1 / -1; }
+    }
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 1rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.65rem;
+    }
+    .panel h2 {
+      margin: 0;
+      font-size: 0.8rem;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--muted);
+      font-weight: 600;
+    }
+    label {
+      font-size: 0.8rem;
+      color: var(--muted);
+      display: block;
+      margin-bottom: 0.25rem;
+    }
+    textarea, input, select {
+      width: 100%;
+      background: var(--bg);
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 0.65rem 0.75rem;
+      font-family: var(--mono);
+      font-size: 0.8rem;
+      resize: vertical;
+    }
+    textarea:focus, input:focus, select:focus {
+      outline: none;
+      border-color: var(--accent);
+    }
+    .row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      align-items: center;
+    }
+    button, .btn {
+      appearance: none;
+      border: 1px solid var(--border);
+      background: #1a2030;
+      color: var(--text);
+      border-radius: 8px;
+      padding: 0.45rem 0.75rem;
+      font-size: 0.8rem;
+      cursor: pointer;
+      font-family: var(--sans);
+    }
+    button.primary {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #061018;
+      font-weight: 600;
+    }
+    button:hover { filter: brightness(1.08); }
+    button.ghost { background: transparent; }
+    .status {
+      font-size: 0.75rem;
+      color: var(--muted);
+      min-height: 1.1em;
+    }
+    .status.ok { color: var(--ok); }
+    .status.bad { color: var(--bad); }
+    .status.warn { color: var(--warn); }
+    pre, .tree {
+      margin: 0;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 0.75rem;
+      font-family: var(--mono);
+      font-size: 0.75rem;
+      overflow: auto;
+      max-height: 320px;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    .kv {
+      display: grid;
+      grid-template-columns: minmax(100px, 180px) 1fr;
+      gap: 0.35rem 0.75rem;
+      font-family: var(--mono);
+      font-size: 0.75rem;
+    }
+    .kv .k { color: var(--muted); }
+    .kv .v { color: var(--text); word-break: break-all; }
+    .checklist { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.5rem; }
+    .checklist li {
+      display: grid;
+      grid-template-columns: 22px 1fr;
+      gap: 0.5rem;
+      align-items: start;
+      font-size: 0.82rem;
+      padding: 0.55rem 0.65rem;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--bg);
+    }
+    .dot {
+      width: 10px; height: 10px; border-radius: 50%;
+      margin-top: 0.35rem;
+      background: var(--muted);
+    }
+    .dot.found { background: var(--ok); }
+    .dot.missing { background: var(--warn); }
+    .dot.na { background: #3a4150; }
+    .hint { color: var(--muted); font-size: 0.75rem; margin: 0; }
+    footer {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 0 1.5rem 2rem;
+      color: var(--muted);
+      font-size: 0.75rem;
+    }
+    footer a { color: var(--accent); }
+    .tabs { display: flex; gap: 0.35rem; flex-wrap: wrap; }
+    .tabs button.active {
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+    .field-chip {
+      display: inline-block;
+      background: #1a2030;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 0.2rem 0.45rem;
+      margin: 0.15rem;
+      font-family: var(--mono);
+      font-size: 0.7rem;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div>
+      <h1>Webhook Receipt</h1>
+      <p>Paste body + headers → parsed fields, signature checklist, curl replay. Local only.</p>
+    </div>
+    <span class="badge">no backend · nothing uploaded</span>
+  </header>
+
+  <main>
+    <section class="panel span-2">
+      <h2>Input</h2>
+      <div class="row">
+        <div style="flex:1; min-width:160px">
+          <label for="provider">Provider preset</label>
+          <select id="provider">
+            <option value="auto">Auto-detect</option>
+            <option value="stripe">Stripe</option>
+            <option value="firebase">Firebase / Google</option>
+            <option value="svix">Svix / Clerk / Resend-style</option>
+            <option value="github">GitHub</option>
+            <option value="generic">Generic JSON</option>
+          </select>
+        </div>
+        <div style="flex:2; min-width:200px">
+          <label for="url">Replay URL (for curl stub)</label>
+          <input id="url" type="text" placeholder="https://your-app.com/webhooks/stripe" value="https://localhost:3000/webhooks" />
+        </div>
+      </div>
+      <div>
+        <label for="headers">Headers (raw: one Name: value per line, or paste from browser/logs)</label>
+        <textarea id="headers" rows="6" placeholder="Content-Type: application/json&#10;Stripe-Signature: t=1710000000,v1=abc...&#10;User-Agent: Stripe/1.0"></textarea>
+      </div>
+      <div>
+        <label for="body">Raw body (exact bytes matter for signature checks — paste as received)</label>
+        <textarea id="body" rows="10" placeholder='{"id":"evt_...","type":"payment_intent.succeeded","data":{"object":{...}}}'></textarea>
+      </div>
+      <div class="row">
+        <button class="primary" id="parseBtn" type="button">Parse receipt</button>
+        <button class="ghost" id="sampleStripe" type="button">Load Stripe sample</button>
+        <button class="ghost" id="sampleGeneric" type="button">Load generic sample</button>
+        <button class="ghost" id="clearBtn" type="button">Clear</button>
+        <span class="status" id="parseStatus"></span>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2>Parsed summary</h2>
+      <div id="summary" class="kv">
+        <div class="k">status</div><div class="v">waiting for paste…</div>
+      </div>
+      <p class="hint">Common event / id fields are pulled when present. Full tree on the right.</p>
+      <div>
+        <h2 style="margin-top:0.5rem">Interesting fields</h2>
+        <div id="chips"></div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2>JSON tree</h2>
+      <pre id="tree">{}</pre>
+    </section>
+
+    <section class="panel span-2">
+      <h2>Signature header checklist</h2>
+      <p class="hint">This does <strong>not</strong> verify HMAC or decrypt anything. It only tells you which headers exist and what you should check in your app.</p>
+      <ul class="checklist" id="checklist"></ul>
+    </section>
+
+    <section class="panel span-2">
+      <div class="row" style="justify-content:space-between">
+        <h2 style="margin:0">Curl replay stub</h2>
+        <button type="button" id="copyCurl">Copy curl</button>
+      </div>
+      <p class="hint">Uses the raw body and parsed headers. Secrets stay in your paste — review before sharing the stub.</p>
+      <pre id="curl"># paste a body and hit Parse</pre>
+      <span class="status" id="copyStatus"></span>
+    </section>
+  </main>
+
+  <footer>
+    Built for FDE / SE workflows · open <code>index.html</code> locally or host as static files ·
+    no network calls from this page.
+  </footer>
+
+  <script>
+    const $ = (id) => document.getElementById(id);
+
+    const SAMPLES = {
+      stripe: {
+        headers: `Content-Type: application/json
+Stripe-Signature: t=1712345678,v1=5257a869e7ecebeda32affa62cdca3fa51cad7e77a0e56ff536d0ce8e108d8bd
+User-Agent: Stripe/1.0 (+https://stripe.com/docs/webhooks)
+`,
+        body: JSON.stringify({
+          id: "evt_1ExampleStripeWebhook",
+          object: "event",
+          api_version: "2023-10-16",
+          created: 1712345678,
+          type: "payment_intent.succeeded",
+          data: {
+            object: {
+              id: "pi_3Example",
+              object: "payment_intent",
+              amount: 2000,
+              currency: "usd",
+              status: "succeeded",
+              customer: "cus_Example"
+            }
+          },
+          livemode: false,
+          pending_webhooks: 1,
+          request: { id: "req_Example", idempotency_key: null }
+        }, null, 2)
+      },
+      generic: {
+        headers: `Content-Type: application/json
+X-Webhook-Id: wh_01HXEXAMPLE
+X-Webhook-Timestamp: 1712345678
+X-Webhook-Signature: sha256=deadbeefcafebabe
+X-Request-Id: req_demo_001
+`,
+        body: JSON.stringify({
+          event: "invoice.paid",
+          id: "evt_demo_001",
+          created_at: "2024-04-05T12:00:00Z",
+          data: {
+            invoice_id: "inv_1001",
+            amount_cents: 4999,
+            currency: "usd",
+            customer_email: "buyer@example.com"
+          }
+        }, null, 2)
+      }
+    };
+
+    function parseHeaderBlock(raw) {
+      const map = {};
+      const lines = (raw || "").split(/\r?\n/);
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed || trimmed.startsWith("#")) continue;
+        // Skip HTTP request line if pasted
+        if (/^(GET|POST|PUT|PATCH|DELETE)\s+/i.test(trimmed)) continue;
+        const idx = trimmed.indexOf(":");
+        if (idx === -1) continue;
+        const name = trimmed.slice(0, idx).trim();
+        const value = trimmed.slice(idx + 1).trim();
+        if (!name) continue;
+        map[name.toLowerCase()] = { name, value };
+      }
+      return map;
+    }
+
+    function getHeader(map, ...names) {
+      for (const n of names) {
+        const hit = map[n.toLowerCase()];
+        if (hit) return hit;
+      }
+      return null;
+    }
+
+    function detectProvider(map, bodyObj, preset) {
+      if (preset && preset !== "auto") return preset;
+      if (getHeader(map, "stripe-signature")) return "stripe";
+      if (getHeader(map, "x-github-event") || getHeader(map, "x-hub-signature-256")) return "github";
+      if (getHeader(map, "svix-id") || getHeader(map, "svix-signature") || getHeader(map, "webhook-id")) return "svix";
+      if (getHeader(map, "x-goog-channel-id") || getHeader(map, "x-forwarded-authorization")) return "firebase";
+      if (bodyObj && (bodyObj.type || "").includes(".") && bodyObj.data) return "stripe";
+      return "generic";
+    }
+
+    function checklistFor(provider, map) {
+      const items = [];
+      const has = (...names) => !!getHeader(map, ...names);
+
+      if (provider === "stripe") {
+        items.push({
+          ok: has("stripe-signature"),
+          title: "Stripe-Signature present",
+          detail: "Expect t=<unix>,v1=<hmac>. Verify with your endpoint secret and the raw body (not re-serialized JSON)."
+        });
+        items.push({
+          ok: has("content-type"),
+          title: "Content-Type",
+          detail: "Should be application/json. Keep the raw string for HMAC."
+        });
+        items.push({
+          ok: null,
+          title: "Timestamp tolerance",
+          detail: "Reject if t is outside your window (Stripe default ~5 min) to stop replay attacks."
+        });
+        items.push({
+          ok: null,
+          title: "Idempotency on evt id",
+          detail: "Store event.id and skip duplicates — Stripe retries."
+        });
+      } else if (provider === "github") {
+        items.push({
+          ok: has("x-hub-signature-256", "x-hub-signature"),
+          title: "X-Hub-Signature-256 present",
+          detail: "HMAC-SHA256 of raw body with your webhook secret. Compare sha256=…"
+        });
+        items.push({
+          ok: has("x-github-event"),
+          title: "X-GitHub-Event",
+          detail: "Event type (push, pull_request, …). Route on this + delivery id."
+        });
+        items.push({
+          ok: has("x-github-delivery"),
+          title: "X-GitHub-Delivery",
+          detail: "Unique delivery UUID — use for idempotency."
+        });
+      } else if (provider === "svix") {
+        items.push({
+          ok: has("svix-id", "webhook-id"),
+          title: "svix-id / webhook-id",
+          detail: "Message id for idempotency."
+        });
+        items.push({
+          ok: has("svix-timestamp", "webhook-timestamp"),
+          title: "svix-timestamp",
+          detail: "Unix seconds — check skew before verifying signature."
+        });
+        items.push({
+          ok: has("svix-signature", "webhook-signature"),
+          title: "svix-signature",
+          detail: "Space-separated v1,<base64> signatures. Verify with your signing secret."
+        });
+      } else if (provider === "firebase") {
+        items.push({
+          ok: has("x-goog-channel-id") || has("authorization") || has("x-forwarded-authorization"),
+          title: "Auth / channel headers",
+          detail: "Firebase/Google pushes vary: check Authorization Bearer or channel token you configured."
+        });
+        items.push({
+          ok: null,
+          title: "Validate against your secret/token",
+          detail: "Do not trust body alone — confirm the push matches the channel you created."
+        });
+        items.push({
+          ok: has("content-type"),
+          title: "Content-Type",
+          detail: "Usually application/json for Cloud Functions / Extensions hooks."
+        });
+      } else {
+        items.push({
+          ok: has("x-webhook-signature", "x-signature", "signature", "x-hub-signature-256"),
+          title: "Signature header (any common name)",
+          detail: "Look for X-Webhook-Signature, X-Signature, or provider docs. Always HMAC the raw body."
+        });
+        items.push({
+          ok: has("x-webhook-timestamp", "x-timestamp", "x-request-timestamp"),
+          title: "Timestamp header",
+          detail: "If present, enforce skew limits before accepting."
+        });
+        items.push({
+          ok: has("x-webhook-id", "x-request-id", "x-delivery-id"),
+          title: "Delivery / request id",
+          detail: "Use for idempotency logs when the body has no stable event id."
+        });
+        items.push({
+          ok: null,
+          title: "HTTPS + secret rotation",
+          detail: "Prefer signed webhooks over IP allowlists alone. Rotate secrets without downtime."
+        });
+      }
+      return items;
+    }
+
+    function pickFields(obj) {
+      if (!obj || typeof obj !== "object") return [];
+      const paths = [
+        ["type"], ["event"], ["event_type"], ["action"],
+        ["id"], ["data", "object", "id"], ["data", "id"],
+        ["data", "object", "status"], ["data", "object", "amount"],
+        ["data", "object", "currency"], ["livemode"],
+        ["created"], ["created_at"], ["api_version"]
+      ];
+      const out = [];
+      for (const path of paths) {
+        let cur = obj;
+        for (const p of path) {
+          if (cur == null || typeof cur !== "object") { cur = undefined; break; }
+          cur = cur[p];
+        }
+        if (cur !== undefined && cur !== null && typeof cur !== "object") {
+          out.push({ path: path.join("."), value: String(cur) });
+        }
+      }
+      // unique by path
+      const seen = new Set();
+      return out.filter((x) => (seen.has(x.path) ? false : (seen.add(x.path), true)));
+    }
+
+    function shellEscapeSingle(s) {
+      return String(s).replace(/'/g, `'\\''`);
+    }
+
+    function buildCurl(url, headerMap, bodyRaw) {
+      const lines = [`curl -i -X POST '${shellEscapeSingle(url || "https://localhost:3000/webhooks")}'`];
+      const preferred = [
+        "content-type",
+        "stripe-signature",
+        "x-hub-signature-256",
+        "x-hub-signature",
+        "x-github-event",
+        "x-github-delivery",
+        "svix-id",
+        "svix-timestamp",
+        "svix-signature",
+        "webhook-id",
+        "webhook-timestamp",
+        "webhook-signature",
+        "x-webhook-id",
+        "x-webhook-timestamp",
+        "x-webhook-signature",
+        "x-signature",
+        "authorization",
+        "user-agent"
+      ];
+      const used = new Set();
+      for (const key of preferred) {
+        const h = headerMap[key];
+        if (h) {
+          lines.push(`  -H '${shellEscapeSingle(h.name + ": " + h.value)}'`);
+          used.add(key);
+        }
+      }
+      for (const [key, h] of Object.entries(headerMap)) {
+        if (used.has(key)) continue;
+        if (["host", "content-length", "connection", "accept-encoding"].includes(key)) continue;
+        lines.push(`  -H '${shellEscapeSingle(h.name + ": " + h.value)}'`);
+      }
+      const body = bodyRaw || "";
+      lines.push(`  --data-binary '${shellEscapeSingle(body)}'`);
+      return lines.join(" \\\n");
+    }
+
+    function renderChecklist(items) {
+      const ul = $("checklist");
+      ul.innerHTML = "";
+      for (const item of items) {
+        const li = document.createElement("li");
+        const dot = document.createElement("span");
+        dot.className = "dot " + (item.ok === true ? "found" : item.ok === false ? "missing" : "na");
+        const body = document.createElement("div");
+        const title = document.createElement("strong");
+        title.textContent = item.title + (item.ok === true ? " ✓" : item.ok === false ? " — missing" : "");
+        const detail = document.createElement("div");
+        detail.className = "hint";
+        detail.textContent = item.detail;
+        body.appendChild(title);
+        body.appendChild(detail);
+        li.appendChild(dot);
+        li.appendChild(body);
+        ul.appendChild(li);
+      }
+    }
+
+    function renderSummary(provider, headerMap, bodyObj, parseError) {
+      const summary = $("summary");
+      summary.innerHTML = "";
+      const add = (k, v) => {
+        const dk = document.createElement("div");
+        dk.className = "k";
+        dk.textContent = k;
+        const dv = document.createElement("div");
+        dv.className = "v";
+        dv.textContent = v;
+        summary.appendChild(dk);
+        summary.appendChild(dv);
+      };
+      add("provider", provider);
+      add("header count", String(Object.keys(headerMap).length));
+      if (parseError) {
+        add("body", "invalid JSON — " + parseError);
+      } else if (bodyObj === null) {
+        add("body", "empty");
+      } else {
+        add("body", Array.isArray(bodyObj) ? `array[${bodyObj.length}]` : "object");
+      }
+      const ct = getHeader(headerMap, "content-type");
+      if (ct) add("content-type", ct.value);
+
+      const chips = $("chips");
+      chips.innerHTML = "";
+      if (bodyObj && typeof bodyObj === "object") {
+        for (const f of pickFields(bodyObj)) {
+          const span = document.createElement("span");
+          span.className = "field-chip";
+          span.textContent = f.path + " = " + f.value;
+          chips.appendChild(span);
+        }
+      }
+    }
+
+    function parseAll() {
+      const status = $("parseStatus");
+      const headerMap = parseHeaderBlock($("headers").value);
+      const bodyRaw = $("body").value;
+      let bodyObj = null;
+      let parseError = null;
+      if (bodyRaw.trim()) {
+        try {
+          bodyObj = JSON.parse(bodyRaw);
+        } catch (e) {
+          parseError = e.message;
+        }
+      }
+      const provider = detectProvider(headerMap, bodyObj, $("provider").value);
+      renderSummary(provider, headerMap, bodyObj, parseError);
+      $("tree").textContent = parseError
+        ? bodyRaw || "(empty)"
+        : JSON.stringify(bodyObj ?? {}, null, 2);
+      renderChecklist(checklistFor(provider, headerMap));
+      $("curl").textContent = buildCurl($("url").value.trim(), headerMap, bodyRaw);
+      if (parseError) {
+        status.textContent = "Parsed headers; body is not valid JSON.";
+        status.className = "status warn";
+      } else if (!bodyRaw.trim() && !Object.keys(headerMap).length) {
+        status.textContent = "Nothing to parse yet.";
+        status.className = "status";
+      } else {
+        status.textContent = "Receipt ready.";
+        status.className = "status ok";
+      }
+    }
+
+    $("parseBtn").addEventListener("click", parseAll);
+    $("body").addEventListener("input", () => { /* lazy: user hits parse */ });
+    $("sampleStripe").addEventListener("click", () => {
+      $("provider").value = "stripe";
+      $("headers").value = SAMPLES.stripe.headers;
+      $("body").value = SAMPLES.stripe.body;
+      $("url").value = "https://localhost:3000/webhooks/stripe";
+      parseAll();
+    });
+    $("sampleGeneric").addEventListener("click", () => {
+      $("provider").value = "generic";
+      $("headers").value = SAMPLES.generic.headers;
+      $("body").value = SAMPLES.generic.body;
+      $("url").value = "https://localhost:3000/webhooks";
+      parseAll();
+    });
+    $("clearBtn").addEventListener("click", () => {
+      $("headers").value = "";
+      $("body").value = "";
+      $("parseStatus").textContent = "";
+      $("parseStatus").className = "status";
+      $("summary").innerHTML = '<div class="k">status</div><div class="v">cleared</div>';
+      $("chips").innerHTML = "";
+      $("tree").textContent = "{}";
+      $("checklist").innerHTML = "";
+      $("curl").textContent = "# paste a body and hit Parse";
+    });
+    $("copyCurl").addEventListener("click", async () => {
+      const text = $("curl").textContent;
+      try {
+        await navigator.clipboard.writeText(text);
+        $("copyStatus").textContent = "Copied.";
+        $("copyStatus").className = "status ok";
+      } catch {
+        $("copyStatus").textContent = "Copy failed — select the stub manually.";
+        $("copyStatus").className = "status bad";
+      }
+    });
+    $("provider").addEventListener("change", () => {
+      if ($("body").value.trim() || $("headers").value.trim()) parseAll();
+    });
+
+    // initial empty checklist hint
+    renderChecklist([
+      {
+        ok: null,
+        title: "Paste headers + body, then Parse",
+        detail: "Or load a sample. Signature values are inspected for presence only — verification stays in your app."
+      }
+    ]);
+  </script>
+
+  <footer id="site-author" style="max-width:1100px;margin:0 auto;padding:0 1.5rem 2rem;color:#8b95a5;font-size:0.8rem;">
+    Built by Humayun Tanwar · MIT
+  </footer>
+</body>
+</html>
