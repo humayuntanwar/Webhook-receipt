@@ -4,12 +4,6 @@ Paste a webhook’s headers + raw body. Get parsed fields, a signature-header ch
 
 **Author:** Humayun Tanwar
 
-Built for FDE / Solutions Engineering work when a Stripe, Firebase, Svix-style, GitHub, or generic JSON webhook fails in a customer environment and you need to see what actually arrived before blaming the handler.
-
-## Why
-
-Customer webhooks break for boring reasons: missing signing headers, wrong event shape, retries you already processed. This tool helps you inspect a receipt in under a minute without pasting secrets into someone else’s SaaS.
-
 ## Features
 
 - Paste **headers** and **raw body** (JSON)
